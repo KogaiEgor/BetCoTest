@@ -84,7 +84,7 @@ async def test_create_new_bet(async_session: AsyncSession):
 @pytest.mark.asyncio
 @patch("app.bets.services.get_event_from_provider", new_callable=AsyncMock)
 @patch("app.bets.services.validate_event", new_callable=AsyncMock)
-async def test_create_bet_service(mock_validate_event, mock_get_event_from_provider, async_session: AsyncSession):
+async def test_create_bet_service(mock_get_event_from_provider, async_session: AsyncSession):
     mock_get_event_from_provider.return_value = {"event_id": "event1", "deadline": 9999999999, "state": 1}
     bet_data = BetCreate(event_id="event1", amount=100.0)
 
@@ -115,13 +115,16 @@ async def test_get_bet_success(async_session: AsyncSession):
     await async_session.execute(delete(Bet))
     await async_session.commit()
 
-    bet = Bet(event_id="event1", amount=100.0, status="not_played")
-    async_session.add(bet)
+    bet1 = Bet(event_id="event1", amount=100, status="not_played")
+    bet2 = Bet(event_id="event1", amount=50, status="not_played")
+    async_session.add_all([bet1, bet2])
     await async_session.commit()
 
-    retrieved_bet = await get_bet("event1", async_session)
+    retrieved_bets = await get_bet("event1", async_session)
 
-    assert retrieved_bet.event_id == bet.event_id
+    assert len(retrieved_bets) == 2
+    assert retrieved_bets[0].event_id == bet1.event_id
+    assert retrieved_bets[1].event_id == bet2.event_id
 
 
 @pytest.mark.asyncio
@@ -179,13 +182,15 @@ async def test_update_status_failure():
 
 @pytest.mark.asyncio
 @patch("app.bets.services.get_bet", new_callable=AsyncMock)
-async def test_process_message_success(mock_get_bet, async_session: AsyncSession):
-    bet = Bet(event_id="event1", amount=100.0, status="not_played")
-    mock_get_bet.return_value = bet
+async def test_process_message_success(mock_get_bets, async_session: AsyncSession):
+    bet1 = Bet(event_id="event1", amount=100.0, status="not_played")
+    bet2 = Bet(event_id="event1", amount=50.0, status="not_played")
+    mock_get_bets.return_value = [bet1, bet2]
 
     message = MagicMock(spec=aio_pika.IncomingMessage)
     message.body = b'{"event_id": "event1", "status": 2}'
 
     await process_message(message, async_session)
 
-    assert bet.status == "won"
+    assert bet1.status == "won"
+    assert bet2.status == "won"
