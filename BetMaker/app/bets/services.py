@@ -49,13 +49,13 @@ async def get_bets_history_service(db: AsyncSession) -> list[Bet]:
     return list(result.scalars().all())
 
 
-async def get_bet(event_id, db: AsyncSession) -> Bet:
+async def get_bet(event_id, db: AsyncSession) -> list[Bet]:
     result = await db.execute(select(Bet).where(Bet.event_id == event_id))
-    bet = result.scalar_one_or_none()
+    bets = result.scalars().all()
 
-    if not bet:
+    if not bets:
         raise ValueError(f"Bet with event_id {event_id} not found")
-    return bet
+    return list(bets)
 
 
 async def get_all_events_from_provider() -> list:
@@ -84,8 +84,9 @@ async def process_message(message, db: AsyncSession) -> None:
         status = event_data["status"]
 
         try:
-            bet = await get_bet(event_id, db)
-            await update_status(bet, status)
+            bets = await get_bet(event_id, db)
+            for bet in bets:
+                await update_status(bet, status)
             await db.commit()
         except ValueError as e:
             print(f"{e}")
